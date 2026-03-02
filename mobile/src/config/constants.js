@@ -5,9 +5,12 @@
 import { Platform } from 'react-native';
 
 // Use localhost on web, WiFi IP on native devices
-export const API_BASE_URL = Platform.OS === 'web'
-  ? 'http://localhost:5000/api'
-  : 'http://192.168.1.6:5000/api';
+const SERVER_HOST = Platform.OS === 'web'
+  ? 'http://localhost:5000'
+  : 'http://192.168.1.6:5000';
+
+export const SERVER_URL = SERVER_HOST;
+export const API_BASE_URL = `${SERVER_HOST}/api`;
 
 // API Endpoints
 export const ENDPOINTS = {
@@ -88,17 +91,22 @@ export const DEPARTMENTS = [
 
 // Colors
 export const COLORS = {
-  primary: '#4F46E5',
-  primaryDark: '#4338CA',
-  secondary: '#10B981',
-  accent: '#F59E0B',
+  primary: '#6366F1',        // Modern indigo
+  primaryLight: '#818CF8',
+  primaryDark: '#4F46E5',
+  secondary: '#10B981',      // Emerald
+  secondaryLight: '#6EE7B7',
+  accent: '#F59E0B',         // Amber
+  accentLight: '#FBBF24',
   danger: '#EF4444',
   warning: '#F59E0B',
   success: '#10B981',
   info: '#3B82F6',
   dark: '#1F2937',
   gray: '#6B7280',
+  gray_medium: '#9CA3AF',
   lightGray: '#E5E7EB',
+  light_bg: '#F3F4F6',       // For light backgrounds in dark mode
   white: '#FFFFFF',
   background: '#F9FAFB',
   card: '#FFFFFF',

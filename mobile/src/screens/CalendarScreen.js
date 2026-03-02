@@ -14,9 +14,11 @@ import {
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { eventAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 import { COLORS } from '../config/constants';
 
 const CalendarScreen = ({ navigation }) => {
+  const { theme, isDarkMode } = useTheme();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [events, setEvents] = useState([]);
   const [markedDates, setMarkedDates] = useState({});

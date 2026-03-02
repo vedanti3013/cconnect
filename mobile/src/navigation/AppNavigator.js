@@ -6,6 +6,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, ROLES } from '../config/constants';
@@ -23,6 +24,7 @@ import PollsScreen from '../screens/PollsScreen';
 import CreatePollScreen from '../screens/CreatePollScreen';
 import QRScannerScreen from '../screens/QRScannerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import UserDetailScreen from '../screens/UserDetailScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -38,7 +40,27 @@ const FeedStack = () => (
     }}
   >
     <Stack.Screen name="FeedHome" component={FeedScreen} options={{ title: 'Feed' }} />
-    <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: 'Post' }} />
+    <Stack.Screen
+      name="PostDetail"
+      component={PostDetailScreen}
+      options={({ navigation }) => ({
+        title: 'Post',
+        headerLeft: () => (
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('FeedHome');
+              }
+            }}
+            style={{ marginRight: 12 }}
+          >
+            <Ionicons name="arrow-back" size={22} color={COLORS.white} />
+          </TouchableOpacity>
+        ),
+      })}
+    />
     <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ title: 'Create Post' }} />
   </Stack.Navigator>
 );
@@ -87,6 +109,11 @@ const ProfileStack = () => {
       }}
     >
       <Stack.Screen name="ProfileHome" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Stack.Screen 
+        name="UserDetail" 
+        component={UserDetailScreen} 
+        options={{ title: 'User Profile' }}
+      />
       {user?.role === ROLES.ADMIN && (
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
       )}

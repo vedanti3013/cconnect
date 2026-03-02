@@ -63,6 +63,13 @@ const RegisterScreen = ({ navigation }) => {
       showError('Passwords do not match');
       return false;
     }
+    if (formData.role === ROLES.STUDENT) {
+      const admissionYear = parseInt(formData.admission_year, 10);
+      if (!admissionYear || admissionYear < 2000 || admissionYear > 2100) {
+        showError('Please enter a valid admission year for students');
+        return false;
+      }
+    }
     setFormError('');
     return true;
   };
@@ -74,14 +81,19 @@ const RegisterScreen = ({ navigation }) => {
     
     setIsSubmitting(true);
     try {
-      const result = await register({
+      const payload = {
         name: formData.name.trim(),
         pid: formData.pid.trim().toUpperCase(),
         password: formData.password,
         role: formData.role,
         department: formData.department,
-        admission_year: parseInt(formData.admission_year),
-      });
+      };
+
+      if (formData.role === ROLES.STUDENT) {
+        payload.admission_year = parseInt(formData.admission_year, 10);
+      }
+
+      const result = await register(payload);
 
       console.log('Register result:', result);
 
@@ -169,18 +181,20 @@ const RegisterScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Admission Year</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter admission year"
-              placeholderTextColor={COLORS.gray}
-              value={formData.admission_year}
-              onChangeText={(value) => handleChange('admission_year', value)}
-              keyboardType="numeric"
-              maxLength={4}
-            />
-          </View>
+          {formData.role === ROLES.STUDENT && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Admission Year</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter admission year"
+                placeholderTextColor={COLORS.gray}
+                value={formData.admission_year}
+                onChangeText={(value) => handleChange('admission_year', value)}
+                keyboardType="numeric"
+                maxLength={4}
+              />
+            </View>
+          )}
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>

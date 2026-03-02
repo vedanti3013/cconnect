@@ -46,6 +46,10 @@ const postSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  is_event: {
+    type: Boolean,
+    default: false
+  },
   likes: {
     type: Number,
     default: 0,
@@ -159,6 +163,7 @@ postSchema.statics.getRankedFeed = async function(userDepartment, page = 1, limi
 // Indexes
 postSchema.index({ department: 1 });
 postSchema.index({ is_urgent: -1 });
+postSchema.index({ is_event: 1 });
 postSchema.index({ event_date: 1 });
 postSchema.index({ created_at: -1 });
 postSchema.index({ created_by: 1 });

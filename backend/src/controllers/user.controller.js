@@ -101,6 +101,11 @@ const updateUser = asyncHandler(async (req, res) => {
     delete updates.role;
   }
 
+  // Prevent manual PID expiry flag changes unless admin
+  if (updates.pid_expired_by_admin !== undefined && req.user.role !== ROLES.ADMIN) {
+    delete updates.pid_expired_by_admin;
+  }
+
   // Prevent password updates through this route
   delete updates.password;
 
@@ -246,6 +251,52 @@ const getUsersByDepartment = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get committee users directory
+ * @route   GET /api/users/committees
+ * @access  Private
+ */
+const getCommitteeUsers = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 50, search } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const query = {
+    role: ROLES.COMMITTEE,
+    is_deleted: { $ne: true },
+    status: 'active'
+  };
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { pid: { $regex: search, $options: 'i' } },
+      { department: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  const [users, total] = await Promise.all([
+    User.find(query)
+      .select('name pid role department')
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+    User.countDocuments(query)
+  ]);
+
+  res.status(HTTP_STATUS.OK).json({
+    status: 'success',
+    data: {
+      users,
+      pagination: {
+        current_page: parseInt(page),
+        total_pages: Math.ceil(total / parseInt(limit)),
+        total_users: total,
+        has_more: skip + users.length < total
+      }
+    }
+  });
+});
+
+/**
  * @desc    Update user role (Admin only)
  * @route   PUT /api/users/:id/role
  * @access  Private/Admin
@@ -288,5 +339,6 @@ module.exports = {
   activateUser,
   deleteUser,
   getUsersByDepartment,
+  getCommitteeUsers,
   updateUserRole
 };

@@ -52,6 +52,8 @@ const getAllPolls = asyncHandler(async (req, res) => {
   const pollsWithStatus = polls.map(poll => {
     const pollObj = poll.toObject();
     pollObj.has_voted = poll.hasUserVoted(req.user._id);
+    const userVote = poll.voters.find(v => v.user_id.toString() === req.user._id.toString());
+    pollObj.user_vote = userVote ? userVote.option_id : null;
     pollObj.is_expired = poll.isExpired();
     // Hide individual voters for privacy
     delete pollObj.voters;

@@ -16,6 +16,9 @@ router.use(protect);
 // Get all users (Admin only)
 router.get('/', authorize(ROLES.ADMIN), userController.getAllUsers);
 
+// Get committee directory (All authenticated users)
+router.get('/committees', userController.getCommitteeUsers);
+
 // Get users by department
 router.get('/department/:department', userController.getUsersByDepartment);
 

@@ -13,25 +13,41 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  ScrollView,
+  Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { postAPI } from '../services/api';
-import { COLORS, ROLES } from '../config/constants';
+import { COLORS, ROLES, SERVER_URL, DEPARTMENTS } from '../config/constants';
 
-const FeedScreen = ({ navigation }) => {
+const FILTER_OPTIONS = ['All', ...DEPARTMENTS.filter(d => d !== 'All')];
+
+const FeedScreen = ({ navigation, route }) => {
   const { user } = useAuth();
+  const { theme, isDarkMode } = useTheme();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedDept, setSelectedDept] = useState('All');
+  const urgentOnly = route.params?.urgentOnly || false;
 
   const canCreatePost = [ROLES.TEACHER, ROLES.COMMITTEE, ROLES.ADMIN].includes(user?.role);
 
-  const fetchPosts = async (pageNum = 1, refresh = false) => {
+  const fetchPosts = async (pageNum = 1, refresh = false, department = selectedDept) => {
     try {
-      const response = await postAPI.getFeed({ page: pageNum, limit: 20 });
+      const params = { page: pageNum, limit: 20 };
+      if (urgentOnly) {
+        params.is_urgent = 'true';
+      } else if (department && department !== 'All') {
+        params.department = department;
+      }
+      const response = await postAPI.getFeed(params);
       const newPosts = response.data.data.posts || [];
       const pagination = response.data.data.pagination;
 
@@ -49,16 +65,26 @@ const FeedScreen = ({ navigation }) => {
     }
   };
 
-  useEffect(() => {
-    fetchPosts();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchPosts(1, true, selectedDept);
+    }, [selectedDept, urgentOnly])
+  );
+
+  const handleDeptFilter = (dept) => {
+    setSelectedDept(dept);
+    setPage(1);
+    setPosts([]);
+    setLoading(true);
+    fetchPosts(1, true, dept);
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setPage(1);
-    await fetchPosts(1, true);
+    await fetchPosts(1, true, selectedDept);
     setRefreshing(false);
-  }, []);
+  }, [selectedDept]);
 
   const loadMore = () => {
     if (!loading && hasMore) {
@@ -87,13 +113,41 @@ const FeedScreen = ({ navigation }) => {
     }
   };
 
+  const handleDeletePost = async (postId) => {
+    const deleteAction = async () => {
+      try {
+        await postAPI.delete(postId);
+        setPosts(prev => prev.filter(post => post._id !== postId));
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to delete post';
+        if (Platform.OS === 'web') {
+          window.alert(message);
+        } else {
+          Alert.alert('Error', message);
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this post?')) {
+        await deleteAction();
+      }
+      return;
+    }
+
+    Alert.alert('Delete Post', 'Delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: deleteAction },
+    ]);
+  };
+
   const PostItem = ({ item }) => (
     <TouchableOpacity
-      style={[styles.postCard, item.is_urgent && styles.urgentPost]}
+      style={[styles.postCard, item.is_urgent && [styles.urgentPost, { borderLeftColor: theme.danger, backgroundColor: isDarkMode ? '#7F1D1D' : '#FEF2F2' }], !item.is_urgent && { backgroundColor: theme.surface, shadowColor: theme.shadow }]}
       onPress={() => navigation.navigate('PostDetail', { postId: item._id })}
     >
       {item.is_urgent && (
-        <View style={styles.urgentBadge}>
+        <View style={[styles.urgentBadge, { backgroundColor: theme.danger }]}>
           <Ionicons name="alert-circle" size={14} color={COLORS.white} />
           <Text style={styles.urgentText}>URGENT</Text>
         </View>
@@ -101,38 +155,46 @@ const FeedScreen = ({ navigation }) => {
 
       <View style={styles.postHeader}>
         <View style={styles.authorInfo}>
-          <View style={styles.avatar}>
+          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
             <Text style={styles.avatarText}>
               {item.created_by?.name?.charAt(0) || '?'}
             </Text>
           </View>
           <View>
-            <Text style={styles.authorName}>{item.created_by?.name}</Text>
-            <Text style={styles.postMeta}>
+            <Text style={[styles.authorName, { color: theme.text }]}>{item.created_by?.name}</Text>
+            <Text style={[styles.postMeta, { color: theme.textSecondary }]}>
               {item.created_by?.role} • {item.department} •{' '}
               {new Date(item.created_at).toLocaleDateString()}
             </Text>
           </View>
         </View>
+        {item.created_by?._id === user?._id && (
+          <TouchableOpacity
+            onPress={() => handleDeletePost(item._id)}
+            style={styles.postDeleteButton}
+          >
+            <Ionicons name="trash-outline" size={18} color={theme.danger} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      <Text style={styles.postTitle}>{item.title}</Text>
-      <Text style={styles.postDescription} numberOfLines={3}>
+      <Text style={[styles.postTitle, { color: theme.text }]}>{item.title}</Text>
+      <Text style={[styles.postDescription, { color: theme.textSecondary }]} numberOfLines={3}>
         {item.description}
       </Text>
 
       {item.attachment_url && item.attachment_type === 'image' && (
         <Image
-          source={{ uri: item.attachment_url }}
+          source={{ uri: item.attachment_url.startsWith('http') ? item.attachment_url : `${SERVER_URL}${item.attachment_url}` }}
           style={styles.postImage}
           resizeMode="cover"
         />
       )}
 
       {item.event_date && (
-        <View style={styles.eventDateContainer}>
-          <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.eventDateText}>
+        <View style={[styles.eventDateContainer, { backgroundColor: isDarkMode ? '#153e75' : '#eff6ff', borderLeftColor: theme.primary }]}>
+          <Ionicons name="calendar-outline" size={16} color={theme.primary} />
+          <Text style={[styles.eventDateText, { color: theme.primary }]}>
             Event: {new Date(item.event_date).toLocaleDateString()}
           </Text>
         </View>
@@ -146,18 +208,18 @@ const FeedScreen = ({ navigation }) => {
           <Ionicons
             name={item.has_liked ? 'heart' : 'heart-outline'}
             size={20}
-            color={item.has_liked ? COLORS.danger : COLORS.gray}
+            color={item.has_liked ? theme.danger : theme.textSecondary}
           />
-          <Text style={styles.actionText}>{item.likes}</Text>
+          <Text style={[styles.actionText, { color: theme.textSecondary }]}>{item.likes}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="chatbubble-outline" size={20} color={COLORS.gray} />
-          <Text style={styles.actionText}>{item.comments_count}</Text>
+          <Ionicons name="chatbubble-outline" size={20} color={theme.textSecondary} />
+          <Text style={[styles.actionText, { color: theme.textSecondary }]}>{item.comments_count}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="share-outline" size={20} color={COLORS.gray} />
+          <Ionicons name="share-outline" size={20} color={theme.textSecondary} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -165,40 +227,82 @@ const FeedScreen = ({ navigation }) => {
 
   if (loading && posts.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {urgentOnly && (
+        <View style={[styles.urgentFilterBanner, { backgroundColor: isDarkMode ? '#7F1D1D' : '#FEF2F2', borderBottomColor: theme.danger }]}>
+          <Ionicons name="alert-circle" size={20} color={theme.danger} />
+          <Text style={[styles.urgentFilterText, { color: theme.danger }]}>Showing Urgent Posts Only</Text>
+          <TouchableOpacity
+            onPress={() => navigation.setParams({ urgentOnly: false })}
+            style={styles.clearFilterButton}
+          >
+            <Ionicons name="close-circle" size={20} color={theme.danger} />
+          </TouchableOpacity>
+        </View>
+      )}
+      {!urgentOnly && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.filterBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}
+          contentContainerStyle={styles.filterBarContent}
+        >
+          {FILTER_OPTIONS.map((dept) => (
+            <TouchableOpacity
+              key={dept}
+              style={[
+                styles.filterChip,
+                selectedDept === dept && [styles.filterChipActive, { backgroundColor: theme.primary, borderColor: theme.primary }],
+                selectedDept !== dept && { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6', borderColor: isDarkMode ? '#4b5563' : '#e5e7eb' },
+              ]}
+              onPress={() => handleDeptFilter(dept)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedDept === dept && styles.filterChipTextActive,
+                  selectedDept !== dept && { color: theme.text },
+                ]}
+              >
+                {dept}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
       <FlatList
         data={posts}
         renderItem={({ item }) => <PostItem item={item} />}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           loading && hasMore ? (
-            <ActivityIndicator size="small" color={COLORS.primary} style={styles.footerLoader} />
+            <ActivityIndicator size="small" color={theme.primary} style={styles.footerLoader} />
           ) : null
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="newspaper-outline" size={64} color={COLORS.gray} />
-            <Text style={styles.emptyText}>No posts yet</Text>
+            <Ionicons name="newspaper-outline" size={64} color={theme.gray} />
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No posts yet</Text>
           </View>
         }
       />
 
       {canCreatePost && (
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { backgroundColor: theme.primary, shadowColor: theme.shadow }]}
           onPress={() => navigation.navigate('CreatePost')}
         >
           <Ionicons name="add" size={28} color={COLORS.white} />
@@ -212,6 +316,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  filterBar: {
+    maxHeight: 48,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterBarContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 24,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: COLORS.white,
   },
   loadingContainer: {
     flex: 1,
@@ -261,6 +397,9 @@ const styles = StyleSheet.create({
   authorInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  postDeleteButton: {
+    padding: 6,
   },
   avatar: {
     width: 40,
@@ -361,6 +500,25 @@ const styles = StyleSheet.create({
   },
   footerLoader: {
     marginVertical: 20,
+  },
+  urgentFilterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fee',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.danger,
+    gap: 8,
+  },
+  urgentFilterText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.danger,
+    marginLeft: 4,
+  },
+  clearFilterButton: {
+    padding: 4,
   },
 });
 

@@ -22,19 +22,23 @@ const getFeed = asyncHandler(async (req, res) => {
     department
   } = req.query;
 
-  const userDepartment = department || req.user.department;
-  
-  // Use the static method for ranked feed
-  const posts = await Post.getRankedFeed(userDepartment, parseInt(page), parseInt(limit));
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const showAll = !department || department === 'All';
 
-  // Get total count for pagination
-  const totalPosts = await Post.countDocuments({
-    is_deleted: false,
-    $or: [
-      { department: userDepartment },
-      { department: 'All' }
-    ]
-  });
+  // Build filter
+  const filter = { is_deleted: false };
+  if (!showAll) {
+    filter.department = department; // strict match — only exact department
+  }
+
+  const posts = await Post.find(filter)
+    .populate('created_by', 'name pid role department')
+    .sort({ is_urgent: -1, created_at: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .lean();
+
+  const totalPosts = await Post.countDocuments(filter);
 
   res.status(HTTP_STATUS.OK).json({
     status: 'success',
@@ -61,11 +65,17 @@ const getAllPosts = asyncHandler(async (req, res) => {
     limit = PAGINATION.DEFAULT_LIMIT,
     department,
     search,
-    is_urgent
+    is_urgent,
+    is_event,
+    created_by
   } = req.query;
 
   // Build query
   const query = { is_deleted: false };
+
+  if (created_by) {
+    query.created_by = created_by;
+  }
 
   if (department && department !== 'All') {
     query.$or = [
@@ -76,6 +86,10 @@ const getAllPosts = asyncHandler(async (req, res) => {
 
   if (is_urgent !== undefined) {
     query.is_urgent = is_urgent === 'true';
+  }
+
+  if (is_event !== undefined) {
+    query.is_event = is_event === 'true';
   }
 
   if (search) {
@@ -152,7 +166,7 @@ const getPostById = asyncHandler(async (req, res) => {
  * @access  Private (Teacher/Committee/Admin)
  */
 const createPost = asyncHandler(async (req, res) => {
-  const { title, description, department, event_date, external_link, is_urgent } = req.body;
+  const { title, description, department, event_date, external_link, is_urgent, is_event } = req.body;
 
   const postData = {
     title,
@@ -160,13 +174,14 @@ const createPost = asyncHandler(async (req, res) => {
     department: department || 'All',
     event_date,
     external_link,
-    is_urgent: is_urgent && req.user.role === 'admin', // Only admin can mark urgent
+    is_urgent: is_urgent === true || is_urgent === 'true', // Any authorized user can mark urgent
+    is_event: is_event === true || is_event === 'true',
     created_by: req.user._id
   };
 
   // Handle file upload if present
   if (req.file) {
-    postData.attachment_url = req.file.path;
+    postData.attachment_url = `/uploads/${req.file.filename}`;
     postData.attachment_type = req.file.mimetype.startsWith('image/') ? 'image' : 'pdf';
   }
 
@@ -220,7 +235,7 @@ const updatePost = asyncHandler(async (req, res) => {
 
   // Handle file upload if present
   if (req.file) {
-    updates.attachment_url = req.file.path;
+    updates.attachment_url = `/uploads/${req.file.filename}`;
     updates.attachment_type = req.file.mimetype.startsWith('image/') ? 'image' : 'pdf';
   }
 
@@ -238,7 +253,7 @@ const updatePost = asyncHandler(async (req, res) => {
 /**
  * @desc    Delete post (soft delete)
  * @route   DELETE /api/posts/:id
- * @access  Private (Owner/Admin)
+ * @access  Private (Owner only)
  */
 const deletePost = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -250,7 +265,7 @@ const deletePost = asyncHandler(async (req, res) => {
   }
 
   // Check ownership
-  if (post.created_by.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+  if (post.created_by.toString() !== req.user._id.toString()) {
     throw new AppError('You can only delete your own posts', HTTP_STATUS.FORBIDDEN);
   }
 

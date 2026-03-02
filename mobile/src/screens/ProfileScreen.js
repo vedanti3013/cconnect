@@ -16,11 +16,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { userAPI, postAPI, eventAPI } from '../services/api';
 import { COLORS, ROLES } from '../config/constants';
 
 const ProfileScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const { theme, isDarkMode, toggleTheme } = useTheme();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -32,14 +34,19 @@ const ProfileScreen = ({ navigation }) => {
   const fetchUserStats = async () => {
     try {
       // Fetch user's activity stats
-      const [postsRes, eventsRes] = await Promise.all([
-        postAPI.getAll({ created_by: user?._id, limit: 100 }),
-        eventAPI.getAll({ limit: 100 }),
+      const [postsRes, eventsRes, eventPostsRes] = await Promise.all([
+        postAPI.getAll({ created_by: user?._id, is_event: 'false', page: 1, limit: 1 }),
+        eventAPI.getAll({ created_by: user?._id, page: 1, limit: 1 }),
+        postAPI.getAll({ created_by: user?._id, is_event: 'true', page: 1, limit: 1 }),
       ]);
 
+      const postsCount = postsRes.data.data.pagination?.total_posts || 0;
+      const userCreatedEvents = eventsRes.data.data.pagination?.total_events || 0;
+      const eventPostsCount = eventPostsRes.data.data.pagination?.total_posts || 0;
+
       setStats({
-        postsCount: postsRes.data.data.posts?.length || 0,
-        eventsAttended: eventsRes.data.data.events?.filter(e => e.has_rsvp)?.length || 0,
+        postsCount,
+        eventsAttended: userCreatedEvents + eventPostsCount,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -66,24 +73,24 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   const MenuItem = ({ icon, title, subtitle, onPress, showArrow = true, rightComponent }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} disabled={!onPress}>
-      <View style={styles.menuIcon}>
-        <Ionicons name={icon} size={22} color={COLORS.primary} />
+    <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.border }]} onPress={onPress} disabled={!onPress}>
+      <View style={[styles.menuIcon, { backgroundColor: `${theme.primary}15` }]}>
+        <Ionicons name={icon} size={22} color={theme.primary} />
       </View>
       <View style={styles.menuContent}>
-        <Text style={styles.menuTitle}>{title}</Text>
-        {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
+        <Text style={[styles.menuTitle, { color: theme.text }]}>{title}</Text>
+        {subtitle && <Text style={[styles.menuSubtitle, { color: theme.gray }]}>{subtitle}</Text>}
       </View>
       {rightComponent || (showArrow && (
-        <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
+        <Ionicons name="chevron-forward" size={20} color={theme.gray} />
       ))}
     </TouchableOpacity>
   );
 
   const StatCard = ({ value, label }) => (
     <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color: theme.primary }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: theme.gray }]}>{label}</Text>
     </View>
   );
 
@@ -98,31 +105,31 @@ const ProfileScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Profile Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.surface }]}>
         <View style={styles.avatarLarge}>
           <Text style={styles.avatarLargeText}>
             {user?.name?.charAt(0) || '?'}
           </Text>
         </View>
-        <Text style={styles.userName}>{user?.name}</Text>
-        <Text style={styles.userPid}>{user?.pid}</Text>
+        <Text style={[styles.userName, { color: theme.text }]}>{user?.name}</Text>
+        <Text style={[styles.userPid, { color: theme.textSecondary }]}>{user?.pid}</Text>
         <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user?.role) }]}>
           <Text style={styles.roleBadgeText}>{user?.role?.toUpperCase()}</Text>
         </View>
-        <Text style={styles.department}>{user?.department}</Text>
+        <Text style={[styles.department, { color: theme.textSecondary }]}>{user?.department}</Text>
       </View>
 
       {/* Stats */}
-      <View style={styles.statsContainer}>
+      <View style={[styles.statsContainer, { backgroundColor: theme.surface }]}>
         <StatCard value={stats?.postsCount || 0} label="Posts" />
         <StatCard value={stats?.eventsAttended || 0} label="Events" />
         <StatCard value={user?.graduation_year || '-'} label="Grad Year" />
@@ -130,8 +137,8 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Account Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        <View style={styles.menuGroup}>
+        <Text style={[styles.sectionTitle, { color: theme.gray }]}>Account</Text>
+        <View style={[styles.menuGroup, { backgroundColor: theme.surface }]}>
           <MenuItem
             icon="person-outline"
             title="Edit Profile"
@@ -149,8 +156,8 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <View style={styles.menuGroup}>
+        <Text style={[styles.sectionTitle, { color: theme.gray }]}>Preferences</Text>
+        <View style={[styles.menuGroup, { backgroundColor: theme.surface }]}>
           <MenuItem
             icon="notifications-outline"
             title="Push Notifications"
@@ -160,7 +167,21 @@ const ProfileScreen = ({ navigation }) => {
               <Switch
                 value={notificationsEnabled}
                 onValueChange={setNotificationsEnabled}
-                trackColor={{ false: COLORS.gray, true: COLORS.primary }}
+                trackColor={{ false: theme.gray, true: theme.primary }}
+                thumbColor={COLORS.white}
+              />
+            }
+          />
+          <MenuItem
+            icon={isDarkMode ? "sunny-outline" : "moon-outline"}
+            title="Dark Mode"
+            subtitle={isDarkMode ? "Enabled" : "Disabled"}
+            showArrow={false}
+            rightComponent={
+              <Switch
+                value={isDarkMode}
+                onValueChange={toggleTheme}
+                trackColor={{ false: theme.gray, true: theme.primary }}
                 thumbColor={COLORS.white}
               />
             }
@@ -171,8 +192,8 @@ const ProfileScreen = ({ navigation }) => {
       {/* Admin Section */}
       {user?.role === ROLES.ADMIN && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Admin Tools</Text>
-          <View style={styles.menuGroup}>
+          <Text style={[styles.sectionTitle, { color: theme.gray }]}>Admin Tools</Text>
+          <View style={[styles.menuGroup, { backgroundColor: theme.surface }]}>
             <MenuItem
               icon="analytics-outline"
               title="Analytics Dashboard"
@@ -191,8 +212,8 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Info Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Information</Text>
-        <View style={styles.menuGroup}>
+        <Text style={[styles.sectionTitle, { color: theme.gray }]}>Information</Text>
+        <View style={[styles.menuGroup, { backgroundColor: theme.surface }]}>
           <MenuItem
             icon="information-circle-outline"
             title="About Campus Connect"
@@ -219,13 +240,22 @@ const ProfileScreen = ({ navigation }) => {
       </View>
 
       {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={22} color={COLORS.danger} />
-        <Text style={styles.logoutText}>Logout</Text>
+      <TouchableOpacity 
+        style={[
+          styles.logoutButton, 
+          { 
+            backgroundColor: theme.surface,
+            borderColor: theme.danger
+          }
+        ]} 
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={22} color={theme.danger} />
+        <Text style={[styles.logoutText, { color: theme.danger }]}>Logout</Text>
       </TouchableOpacity>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Campus Connect © 2024</Text>
+      <View style={[styles.footer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.footerText, { color: theme.textSecondary }]}>Campus Connect © 2024</Text>
       </View>
     </ScrollView>
   );
@@ -248,6 +278,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   avatarLarge: {
     width: 80,

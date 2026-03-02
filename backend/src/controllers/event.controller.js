@@ -20,7 +20,8 @@ const getAllEvents = asyncHandler(async (req, res) => {
     page = PAGINATION.DEFAULT_PAGE, 
     limit = PAGINATION.DEFAULT_LIMIT,
     department,
-    upcoming
+    upcoming,
+    created_by
   } = req.query;
 
   // Build query
@@ -36,6 +37,10 @@ const getAllEvents = asyncHandler(async (req, res) => {
   if (upcoming === 'true') {
     query.date = { $gte: new Date() };
     query.is_cancelled = false;
+  }
+
+  if (created_by) {
+    query.created_by = created_by;
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);

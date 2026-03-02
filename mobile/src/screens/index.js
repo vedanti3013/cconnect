@@ -26,4 +26,5 @@ export { default as CreatePollScreen } from './CreatePollScreen';
 
 // Profile Screens
 export { default as ProfileScreen } from './ProfileScreen';
+export { default as UserDetailScreen } from './UserDetailScreen';
 export { default as AnalyticsScreen } from './AnalyticsScreen';

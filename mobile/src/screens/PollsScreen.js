@@ -15,11 +15,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { pollAPI } from '../services/api';
 import { COLORS, ROLES } from '../config/constants';
 
 const PollsScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const { theme, isDarkMode } = useTheme();
   const [polls, setPolls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,9 +57,9 @@ const PollsScreen = ({ navigation }) => {
     setRefreshing(false);
   }, [filter]);
 
-  const handleVote = async (pollId, optionIndex) => {
+  const handleVote = async (pollId, optionId) => {
     try {
-      const response = await pollAPI.vote(pollId, optionIndex);
+      const response = await pollAPI.vote(pollId, optionId);
       setPolls(prev =>
         prev.map(poll =>
           poll._id === pollId ? response.data.data.poll : poll
@@ -71,10 +73,10 @@ const PollsScreen = ({ navigation }) => {
 
   const FilterButton = ({ label, value }) => (
     <TouchableOpacity
-      style={[styles.filterButton, filter === value && styles.filterButtonActive]}
+      style={[styles.filterButton, filter === value && [styles.filterButtonActive, { backgroundColor: theme.primary }], filter !== value && { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6' }]}
       onPress={() => setFilter(value)}
     >
-      <Text style={[styles.filterText, filter === value && styles.filterTextActive]}>
+      <Text style={[styles.filterText, filter === value ? styles.filterTextActive : { color: theme.text }]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -86,42 +88,55 @@ const PollsScreen = ({ navigation }) => {
     const hasVoted = poll.has_voted;
 
     return (
-      <View style={styles.pollCard}>
+      <View style={[styles.pollCard, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
         <View style={styles.pollHeader}>
           <View style={styles.authorInfo}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
               <Text style={styles.avatarText}>
                 {poll.created_by?.name?.charAt(0) || '?'}
               </Text>
             </View>
             <View>
-              <Text style={styles.authorName}>{poll.created_by?.name}</Text>
-              <Text style={styles.pollMeta}>
+              <Text style={[styles.authorName, { color: theme.text }]}>{poll.created_by?.name}</Text>
+              <Text style={[styles.pollMeta, { color: theme.textSecondary }]}>
                 {poll.department} • {new Date(poll.created_at).toLocaleDateString()}
               </Text>
             </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: isExpired ? COLORS.gray : COLORS.success }]}>
+          <View style={[styles.statusBadge, { backgroundColor: isExpired ? theme.gray : theme.success }]}>
             <Text style={styles.statusText}>{isExpired ? 'Closed' : 'Active'}</Text>
           </View>
         </View>
 
-        <Text style={styles.pollQuestion}>{poll.question}</Text>
+        <Text style={[styles.pollQuestion, { color: theme.text }]}>{poll.question}</Text>
+
+        {hasVoted && (
+          <View style={[styles.votedBadge, { backgroundColor: isDarkMode ? '#153e75' : '#ecfdf5', borderColor: theme.success }]}>
+            <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+            <Text style={[styles.votedBadgeText, { color: theme.success }]}>You already voted</Text>
+          </View>
+        )}
 
         <View style={styles.optionsContainer}>
           {poll.options.map((option, index) => {
             const percentage = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
-            const isSelected = poll.user_vote === index;
+              const isSelected = poll.user_vote === option._id;
 
             return (
               <TouchableOpacity
-                key={index}
+                  key={option._id}
                 style={[
                   styles.optionButton,
                   (hasVoted || isExpired) && styles.optionButtonVoted,
-                  isSelected && styles.optionButtonSelected,
+                  isSelected && [styles.optionButtonSelected, { borderColor: theme.primary }],
+                  !isSelected && { borderColor: theme.border },
+                  {
+                    backgroundColor: isSelected
+                      ? (isDarkMode ? '#1E3A8A33' : '#EEF2FF')
+                      : (isDarkMode ? '#273449' : '#F8FAFC'),
+                  },
                 ]}
-                onPress={() => !hasVoted && !isExpired && handleVote(poll._id, index)}
+                  onPress={() => !hasVoted && !isExpired && handleVote(poll._id, option._id)}
                 disabled={hasVoted || isExpired}
               >
                 {(hasVoted || isExpired) && (
@@ -129,22 +144,23 @@ const PollsScreen = ({ navigation }) => {
                     style={[
                       styles.progressBar,
                       { width: `${percentage}%` },
-                      isSelected && styles.progressBarSelected,
+                      isSelected && { backgroundColor: theme.primary },
+                      !isSelected && { backgroundColor: theme.primary + '40' },
                     ]}
                   />
                 )}
                 <View style={styles.optionContent}>
-                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                  <Text style={[styles.optionText, isSelected && { color: theme.primary }, !isSelected && { color: theme.text }]}>
                     {option.text}
                   </Text>
                   {(hasVoted || isExpired) && (
-                    <Text style={[styles.percentageText, isSelected && styles.percentageTextSelected]}>
+                    <Text style={[styles.percentageText, isSelected && { color: theme.primary }, !isSelected && { color: theme.textSecondary }]}>
                       {percentage}%
                     </Text>
                   )}
                 </View>
                 {isSelected && (
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                  <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
                 )}
               </TouchableOpacity>
             );
@@ -153,11 +169,11 @@ const PollsScreen = ({ navigation }) => {
 
         <View style={styles.pollFooter}>
           <View style={styles.votesInfo}>
-            <Ionicons name="people-outline" size={16} color={COLORS.gray} />
-            <Text style={styles.votesText}>{totalVotes} votes</Text>
+            <Ionicons name="people-outline" size={16} color={theme.textSecondary} />
+            <Text style={[styles.votesText, { color: theme.textSecondary }]}>{totalVotes} votes</Text>
           </View>
           {!isExpired && (
-            <Text style={styles.expiresText}>
+            <Text style={[styles.expiresText, { color: theme.textSecondary }]}>
               Expires: {new Date(poll.expires_at).toLocaleDateString()}
             </Text>
           )}
@@ -168,16 +184,16 @@ const PollsScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Filter Bar */}
-      <View style={styles.filterBar}>
+      <View style={[styles.filterBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <FilterButton label="Active" value="active" />
         <FilterButton label="Closed" value="closed" />
         <FilterButton label="All" value="all" />
@@ -189,19 +205,19 @@ const PollsScreen = ({ navigation }) => {
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="bar-chart-outline" size={64} color={COLORS.gray} />
-            <Text style={styles.emptyText}>No polls found</Text>
+            <Ionicons name="bar-chart-outline" size={64} color={theme.gray} />
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No polls found</Text>
           </View>
         }
       />
 
       {canCreatePoll && (
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { backgroundColor: theme.primary, shadowColor: theme.shadow }]}
           onPress={() => navigation.navigate('CreatePoll')}
         >
           <Ionicons name="add" size={28} color={COLORS.white} />
@@ -310,13 +326,31 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 16,
   },
+  votedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#ecfdf5',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  votedBadgeText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.success,
+  },
   optionsContainer: {
     marginBottom: 16,
   },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent',
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
@@ -325,7 +359,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   optionButtonVoted: {
-    backgroundColor: COLORS.white,
+    backgroundColor: 'transparent',
   },
   optionButtonSelected: {
     borderColor: COLORS.primary,

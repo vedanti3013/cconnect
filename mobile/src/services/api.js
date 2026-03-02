@@ -27,6 +27,15 @@ api.interceptors.request.use(
     } catch (error) {
       console.error('Error getting token:', error);
     }
+    // Don't override Content-Type for FormData (let browser set it with boundary)
+    if (config.data instanceof FormData) {
+      // Remove content-type so browser auto-sets multipart/form-data with boundary
+      if (config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else if (config.headers) {
+        delete config.headers['Content-Type'];
+      }
+    }
     return config;
   },
   (error) => {
@@ -69,6 +78,7 @@ export const authAPI = {
 // User API
 export const userAPI = {
   getAll: (params) => api.get('/users', { params }),
+  getCommittees: (params) => api.get('/users/committees', { params }),
   getById: (id) => api.get(`/users/${id}`),
   update: (id, data) => api.put(`/users/${id}`, data),
   deactivate: (id) => api.put(`/users/${id}/deactivate`),
@@ -85,7 +95,7 @@ export const postAPI = {
   getById: (id) => api.get(`/posts/${id}`),
   create: (data) => api.post('/posts', data),
   createWithFile: (formData) => api.post('/posts', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   }),
   update: (id, data) => api.put(`/posts/${id}`, data),
   delete: (id) => api.delete(`/posts/${id}`),

@@ -8,7 +8,7 @@ const postController = require('../controllers/post.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { canCreatePost, isAdmin } = require('../middleware/rbac.middleware');
 const { validate, schemas } = require('../middleware/validation.middleware');
-const { upload } = require('../config/cloudinary');
+const { upload } = require('../config/localStorage');
 
 // All routes require authentication
 router.use(protect);

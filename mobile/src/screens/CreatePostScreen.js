@@ -30,12 +30,22 @@ const CreatePostScreen = ({ navigation }) => {
     description: '',
     department: 'All',
     is_urgent: false,
+    is_event: false,
     event_date: null,
     external_link: '',
   });
   const [attachment, setAttachment] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const showError = (msg) => {
+    if (Platform.OS === 'web') {
+      setFormError(msg);
+    } else {
+      Alert.alert('Error', msg);
+    }
+  };
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -44,7 +54,7 @@ const CreatePostScreen = ({ navigation }) => {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload images.');
+      showError('Please grant camera roll permissions to upload images.');
       return;
     }
 
@@ -64,22 +74,25 @@ const CreatePostScreen = ({ navigation }) => {
   };
 
   const handleSubmit = async () => {
+    setFormError('');
     if (!formData.title.trim()) {
-      Alert.alert('Error', 'Please enter a title');
+      showError('Please enter a title');
       return;
     }
     if (!formData.description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
+      showError('Please enter a description');
       return;
     }
 
     setLoading(true);
     try {
+      console.log('Starting post submission...');
       const submitData = new FormData();
       submitData.append('title', formData.title.trim());
       submitData.append('description', formData.description.trim());
       submitData.append('department', formData.department);
       submitData.append('is_urgent', formData.is_urgent.toString());
+      submitData.append('is_event', formData.is_event.toString());
       
       if (formData.event_date) {
         submitData.append('event_date', formData.event_date.toISOString());
@@ -88,20 +101,43 @@ const CreatePostScreen = ({ navigation }) => {
         submitData.append('external_link', formData.external_link.trim());
       }
       if (attachment) {
-        submitData.append('attachment', {
-          uri: attachment.uri,
-          type: 'image/jpeg',
-          name: 'attachment.jpg',
-        });
+        console.log('Attachment URI:', attachment.uri?.substring(0, 50));
+        if (Platform.OS === 'web') {
+          try {
+            const response = await fetch(attachment.uri);
+            const blob = await response.blob();
+            console.log('Blob created:', blob.size, blob.type);
+            const file = new File([blob], 'attachment.jpg', { type: blob.type || 'image/jpeg' });
+            submitData.append('attachment', file);
+          } catch (blobErr) {
+            console.error('Blob conversion error:', blobErr);
+            showError('Failed to process image. Please try again.');
+            setLoading(false);
+            return;
+          }
+        } else {
+          submitData.append('attachment', {
+            uri: attachment.uri,
+            type: 'image/jpeg',
+            name: 'attachment.jpg',
+          });
+        }
       }
 
-      await postAPI.create(submitData);
-      Alert.alert('Success', 'Post created successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      console.log('Sending request...');
+      await postAPI.createWithFile(submitData);
+      console.log('Post created successfully!');
+      if (Platform.OS === 'web') {
+        window.alert('Post created successfully!');
+        navigation.goBack();
+      } else {
+        Alert.alert('Success', 'Post created successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error) {
       console.error('Error creating post:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to create post');
+      showError(error.response?.data?.message || 'Failed to create post');
     } finally {
       setLoading(false);
     }
@@ -110,6 +146,11 @@ const CreatePostScreen = ({ navigation }) => {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
+        {formError ? (
+          <View style={{ backgroundColor: '#ffe0e0', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+            <Text style={{ color: '#c00', textAlign: 'center' }}>{formError}</Text>
+          </View>
+        ) : null}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Title *</Text>
           <TextInput
@@ -160,6 +201,19 @@ const CreatePostScreen = ({ navigation }) => {
             value={formData.is_urgent}
             onValueChange={(value) => handleChange('is_urgent', value)}
             trackColor={{ false: COLORS.gray, true: COLORS.primary }}
+            thumbColor={COLORS.white}
+          />
+        </View>
+
+        <View style={styles.switchContainer}>
+          <View>
+            <Text style={styles.label}>Mark as Event</Text>
+            <Text style={styles.switchHint}>Event posts also appear in Events tab</Text>
+          </View>
+          <Switch
+            value={formData.is_event}
+            onValueChange={(value) => handleChange('is_event', value)}
+            trackColor={{ false: COLORS.gray, true: COLORS.secondary }}
             thumbColor={COLORS.white}
           />
         </View>

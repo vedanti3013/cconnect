@@ -19,7 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { postAPI, commentAPI } from '../services/api';
-import { COLORS } from '../config/constants';
+import { COLORS, SERVER_URL } from '../config/constants';
 
 const PostDetailScreen = ({ route, navigation }) => {
   const { postId } = route.params;
@@ -101,6 +101,34 @@ const PostDetailScreen = ({ route, navigation }) => {
     );
   };
 
+  const handleDeletePost = async () => {
+    const deleteAction = async () => {
+      try {
+        await postAPI.delete(postId);
+        navigation.goBack();
+      } catch (error) {
+        const message = error.response?.data?.message || 'Failed to delete post';
+        if (Platform.OS === 'web') {
+          window.alert(message);
+        } else {
+          Alert.alert('Error', message);
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this post?')) {
+        await deleteAction();
+      }
+      return;
+    }
+
+    Alert.alert('Delete Post', 'Delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: deleteAction },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -135,25 +163,35 @@ const PostDetailScreen = ({ route, navigation }) => {
 
           {/* Author Info */}
           <View style={styles.authorSection}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {post.created_by?.name?.charAt(0) || '?'}
-              </Text>
+            <View style={styles.authorInfoLeft}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {post.created_by?.name?.charAt(0) || '?'}
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.authorName}>{post.created_by?.name}</Text>
+                <Text style={styles.postMeta}>
+                  {post.created_by?.role} • {post.department}
+                </Text>
+                <Text style={styles.postDate}>
+                  {new Date(post.created_at).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.authorName}>{post.created_by?.name}</Text>
-              <Text style={styles.postMeta}>
-                {post.created_by?.role} • {post.department}
-              </Text>
-              <Text style={styles.postDate}>
-                {new Date(post.created_at).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
-            </View>
+            {post.created_by?._id === user?._id && (
+              <TouchableOpacity
+                onPress={handleDeletePost}
+                style={styles.postDeleteButton}
+              >
+                <Ionicons name="trash-outline" size={20} color={COLORS.danger} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Post Content */}
@@ -163,7 +201,7 @@ const PostDetailScreen = ({ route, navigation }) => {
           {/* Attachment */}
           {post.attachment_url && post.attachment_type === 'image' && (
             <Image
-              source={{ uri: post.attachment_url }}
+              source={{ uri: post.attachment_url.startsWith('http') ? post.attachment_url : `${SERVER_URL}${post.attachment_url}` }}
               style={styles.postImage}
               resizeMode="contain"
             />
@@ -308,7 +346,12 @@ const styles = StyleSheet.create({
   authorSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 20,
+  },
+  authorInfoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   avatar: {
     width: 50,
@@ -453,6 +496,9 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 4,
+  },
+  postDeleteButton: {
+    padding: 6,
   },
   commentText: {
     fontSize: 14,

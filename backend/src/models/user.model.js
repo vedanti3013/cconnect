@@ -45,13 +45,23 @@ const userSchema = new mongoose.Schema({
   },
   admission_year: {
     type: Number,
-    required: [true, 'Admission year is required'],
+    required: function() {
+      return this.role === ROLES.STUDENT;
+    },
+    default: null,
     min: [2000, 'Invalid admission year'],
     max: [2100, 'Invalid admission year']
   },
   graduation_year: {
     type: Number,
-    required: true
+    required: function() {
+      return this.role === ROLES.STUDENT;
+    },
+    default: null
+  },
+  pid_expired_by_admin: {
+    type: Boolean,
+    default: false
   },
   status: {
     type: String,
@@ -87,8 +97,13 @@ const userSchema = new mongoose.Schema({
 
 // Pre-validate middleware to calculate graduation year before validation
 userSchema.pre('validate', function(next) {
-  if (this.isModified('admission_year') || !this.graduation_year) {
-    this.graduation_year = this.admission_year + COURSE_DURATION;
+  if (this.role === ROLES.STUDENT) {
+    if (this.isModified('admission_year') || !this.graduation_year) {
+      this.graduation_year = this.admission_year + COURSE_DURATION;
+    }
+  } else {
+    this.admission_year = null;
+    this.graduation_year = null;
   }
   next();
 });
@@ -110,6 +125,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Method to check if PID is expired
 userSchema.methods.isPIDExpired = function() {
+  if (!this.graduation_year) return false;
   const currentYear = parseInt(process.env.CURRENT_YEAR) || new Date().getFullYear();
   return currentYear > this.graduation_year;
 };
@@ -126,9 +142,17 @@ userSchema.methods.canLogin = function() {
     return { allowed: false, reason: 'Account does not exist' };
   }
 
-  // Check PID expiry
-  if (this.isPIDExpired()) {
+  // Student accounts expire automatically based on graduation year
+  if (this.role === ROLES.STUDENT && this.isPIDExpired()) {
     return { allowed: false, reason: 'PID has expired. Your graduation year has passed.' };
+  }
+
+  // Teacher/Committee/Admin accounts only expire when explicitly marked by admin
+  if (
+    (this.role === ROLES.TEACHER || this.role === ROLES.COMMITTEE || this.role === ROLES.ADMIN)
+    && this.pid_expired_by_admin
+  ) {
+    return { allowed: false, reason: 'PID has expired by admin action.' };
   }
 
   return { allowed: true };
