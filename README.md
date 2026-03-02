@@ -1,4 +1,4 @@
-# Campus Connect
+# C Connect
 
 A Centralized Role-Based Institutional Communication Platform - A full-stack mobile application for educational institutions enabling seamless communication between students, teachers, committee members, and administrators.
 
