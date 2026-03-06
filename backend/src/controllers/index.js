@@ -8,6 +8,7 @@ const userController = require('./user.controller');
 const postController = require('./post.controller');
 const commentController = require('./comment.controller');
 const eventController = require('./event.controller');
+const registrationController = require('./registration.controller');
 const pollController = require('./poll.controller');
 const analyticsController = require('./analytics.controller');
 
@@ -17,6 +18,7 @@ module.exports = {
   postController,
   commentController,
   eventController,
+  registrationController,
   pollController,
   analyticsController
 };

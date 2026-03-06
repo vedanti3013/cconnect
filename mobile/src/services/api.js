@@ -129,6 +129,17 @@ export const eventAPI = {
   cancel: (id) => api.put(`/events/${id}/cancel`),
 };
 
+// Registration API
+export const registrationAPI = {
+  register: (eventId) => api.post(`/registrations/${eventId}/register`),
+  getMyQR: (eventId) => api.get(`/registrations/${eventId}/my-qr`),
+  getStatus: (eventId) => api.get(`/registrations/${eventId}/status`),
+  validateQR: (data) => api.post('/registrations/validate-qr', data),
+  getList: (eventId, params) => api.get(`/registrations/${eventId}/list`, { params }),
+  exportExcel: (eventId) => api.get(`/registrations/${eventId}/export`, { responseType: 'blob' }),
+  unregister: (eventId) => api.delete(`/registrations/${eventId}/unregister`),
+};
+
 // Poll API
 export const pollAPI = {
   getAll: (params) => api.get('/polls', { params }),

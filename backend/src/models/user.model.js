@@ -23,6 +23,13 @@ const userSchema = new mongoose.Schema({
     uppercase: true,
     index: true
   },
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    trim: true,
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
+  },
   password: {
     type: String,
     required: [true, 'Password is required'],
@@ -58,6 +65,17 @@ const userSchema = new mongoose.Schema({
       return this.role === ROLES.STUDENT;
     },
     default: null
+  },
+  section: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  year: {
+    type: Number,
+    default: null,
+    min: [1, 'Year must be at least 1'],
+    max: [6, 'Year cannot exceed 6']
   },
   pid_expired_by_admin: {
     type: Boolean,

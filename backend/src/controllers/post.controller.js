@@ -4,6 +4,7 @@
  */
 
 const Post = require('../models/post.model');
+const Event = require('../models/event.model');
 const Comment = require('../models/comment.model');
 const Analytics = require('../models/analytics.model');
 const { asyncHandler, AppError } = require('../middleware/error.middleware');
@@ -187,6 +188,24 @@ const createPost = asyncHandler(async (req, res) => {
 
   const post = await Post.create(postData);
   await post.populate('created_by', 'name pid role department');
+
+  // Auto-create a linked Event if this post has an event_date
+  if (post.event_date) {
+    try {
+      const linkedEvent = await Event.create({
+        title: post.title,
+        description: post.description || post.title,
+        date: post.event_date,
+        location: post.department || 'TBA',
+        department: post.department || 'All',
+        created_by: req.user._id
+      });
+      post.linked_event_id = linkedEvent._id;
+      await post.save();
+    } catch (err) {
+      console.error('Failed to auto-create linked event:', err.message);
+    }
+  }
 
   // Update analytics
   await Analytics.incrementMetric('post_count');

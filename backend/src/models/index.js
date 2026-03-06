@@ -8,6 +8,7 @@ const Post = require('./post.model');
 const Comment = require('./comment.model');
 const Event = require('./event.model');
 const Attendance = require('./attendance.model');
+const Registration = require('./registration.model');
 const Poll = require('./poll.model');
 const Analytics = require('./analytics.model');
 
@@ -17,6 +18,7 @@ module.exports = {
   Comment,
   Event,
   Attendance,
+  Registration,
   Poll,
   Analytics
 };

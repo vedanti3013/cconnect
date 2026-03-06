@@ -20,24 +20,18 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, DEPARTMENTS, ROLES } from '../config/constants';
 
 const RegisterScreen = ({ navigation }) => {
-  const { register } = useAuth();
-  const [formData, setFormData] = useState({
-    name: '',
-    pid: '',
-    password: '',
-    confirmPassword: '',
-    role: ROLES.STUDENT,
-    department: DEPARTMENTS[0],
-    admission_year: new Date().getFullYear().toString(),
-  });
+  const { register, error, clearError } = useAuth();
+  const [name, setName] = useState('');
+  const [pid, setPid] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState(ROLES.STUDENT);
+  const [department, setDepartment] = useState(DEPARTMENTS[0]);
+  const [admissionYear, setAdmissionYear] = useState(new Date().getFullYear().toString());
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (formError) setFormError('');
-  };
 
   const showError = (message) => {
     setFormError(message);
@@ -46,65 +40,41 @@ const RegisterScreen = ({ navigation }) => {
     }
   };
 
-  const validateForm = () => {
-    if (!formData.name.trim()) {
-      showError('Please enter your name');
-      return false;
-    }
-    if (!formData.pid.trim()) {
-      showError('Please enter your PID');
-      return false;
-    }
-    if (formData.password.length < 6) {
-      showError('Password must be at least 6 characters');
-      return false;
-    }
-    if (formData.password !== formData.confirmPassword) {
-      showError('Passwords do not match');
-      return false;
-    }
-    if (formData.role === ROLES.STUDENT) {
-      const admissionYear = parseInt(formData.admission_year, 10);
-      if (!admissionYear || admissionYear < 2000 || admissionYear > 2100) {
-        showError('Please enter a valid admission year for students');
-        return false;
-      }
-    }
-    setFormError('');
-    return true;
-  };
-
   const handleRegister = async () => {
-    if (!validateForm()) {
+    if (!name.trim() || !pid.trim() || !email.trim() || !password.trim()) {
+      showError('Please fill in all required fields');
       return;
     }
-    
+
+    if (password !== confirmPassword) {
+      showError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters');
+      return;
+    }
+
+    setFormError('');
+    clearError();
     setIsSubmitting(true);
-    try {
-      const payload = {
-        name: formData.name.trim(),
-        pid: formData.pid.trim().toUpperCase(),
-        password: formData.password,
-        role: formData.role,
-        department: formData.department,
-      };
 
-      if (formData.role === ROLES.STUDENT) {
-        payload.admission_year = parseInt(formData.admission_year, 10);
-      }
+    const userData = {
+      name: name.trim(),
+      pid: pid.trim().toUpperCase(),
+      email: email.trim().toLowerCase(),
+      password,
+      role,
+      department,
+      admission_year: parseInt(admissionYear, 10),
+    };
 
-      const result = await register(payload);
+    const result = await register(userData);
+    setIsSubmitting(false);
 
-      console.log('Register result:', result);
-
-      if (!result.success) {
-        showError(result.error);
-      }
-    } catch (err) {
-      console.error('Register error:', err);
-      showError(err.message || 'Something went wrong');
-    } finally {
-      setIsSubmitting(false);
+    if (!result.success) {
+      showError(result.error);
     }
   };
 
@@ -118,8 +88,8 @@ const RegisterScreen = ({ navigation }) => {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join Campus Connect</Text>
+          <Text style={styles.title}>Campus Connect</Text>
+          <Text style={styles.subtitle}>Create your account</Text>
         </View>
 
         <View style={styles.form}>
@@ -128,26 +98,43 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.errorText}>{formError}</Text>
             </View>
           ) : null}
+
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.label}>Full Name *</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter your full name"
               placeholderTextColor={COLORS.gray}
-              value={formData.name}
-              onChangeText={(value) => handleChange('name', value)}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>PID</Text>
+            <Text style={styles.label}>PID *</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter your PID"
               placeholderTextColor={COLORS.gray}
-              value={formData.pid}
-              onChangeText={(value) => handleChange('pid', value)}
+              value={pid}
+              onChangeText={setPid}
               autoCapitalize="characters"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor={COLORS.gray}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
@@ -155,13 +142,13 @@ const RegisterScreen = ({ navigation }) => {
             <Text style={styles.label}>Role</Text>
             <View style={styles.pickerContainer}>
               <Picker
-                selectedValue={formData.role}
-                onValueChange={(value) => handleChange('role', value)}
+                selectedValue={role}
+                onValueChange={setRole}
                 style={styles.picker}
               >
                 <Picker.Item label="Student" value={ROLES.STUDENT} />
                 <Picker.Item label="Teacher" value={ROLES.TEACHER} />
-                <Picker.Item label="Committee Member" value={ROLES.COMMITTEE} />
+                <Picker.Item label="Committee" value={ROLES.COMMITTEE} />
               </Picker>
             </View>
           </View>
@@ -170,8 +157,8 @@ const RegisterScreen = ({ navigation }) => {
             <Text style={styles.label}>Department</Text>
             <View style={styles.pickerContainer}>
               <Picker
-                selectedValue={formData.department}
-                onValueChange={(value) => handleChange('department', value)}
+                selectedValue={department}
+                onValueChange={setDepartment}
                 style={styles.picker}
               >
                 {DEPARTMENTS.filter(d => d !== 'All').map((dept) => (
@@ -181,53 +168,52 @@ const RegisterScreen = ({ navigation }) => {
             </View>
           </View>
 
-          {formData.role === ROLES.STUDENT && (
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Admission Year</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter admission year"
-                placeholderTextColor={COLORS.gray}
-                value={formData.admission_year}
-                onChangeText={(value) => handleChange('admission_year', value)}
-                keyboardType="numeric"
-                maxLength={4}
-              />
-            </View>
-          )}
-
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>Admission Year</Text>
             <TextInput
               style={styles.input}
-              placeholder="Create a password"
+              placeholder="e.g. 2024"
               placeholderTextColor={COLORS.gray}
-              value={formData.password}
-              onChangeText={(value) => handleChange('password', value)}
-              secureTextEntry={!showPassword}
+              value={admissionYear}
+              onChangeText={setAdmissionYear}
+              keyboardType="numeric"
+              maxLength={4}
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirm Password</Text>
+            <Text style={styles.label}>Password *</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor={COLORS.gray}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+              >
+                <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Confirm Password *</Text>
             <TextInput
               style={styles.input}
               placeholder="Confirm your password"
               placeholderTextColor={COLORS.gray}
-              value={formData.confirmPassword}
-              onChangeText={(value) => handleChange('confirmPassword', value)}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
             />
           </View>
-
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.showPasswordButton}
-          >
-            <Text style={styles.showPasswordText}>
-              {showPassword ? 'Hide Passwords' : 'Show Passwords'}
-            </Text>
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.registerButton, isSubmitting && styles.registerButtonDisabled]}
@@ -260,21 +246,21 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
     padding: 24,
-    paddingTop: 60,
   },
   header: {
     alignItems: 'center',
     marginBottom: 32,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: COLORS.primary,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: COLORS.textSecondary,
   },
   form: {
@@ -308,7 +294,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     fontSize: 16,
     color: COLORS.text,
   },
@@ -321,12 +307,26 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
+    color: COLORS.text,
   },
-  showPasswordButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 16,
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
   },
-  showPasswordText: {
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  eyeButton: {
+    padding: 16,
+  },
+  eyeText: {
     color: COLORS.primary,
     fontWeight: '600',
   },
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 24,
   },
   registerButtonDisabled: {
     opacity: 0.7,

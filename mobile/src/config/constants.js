@@ -50,6 +50,15 @@ export const ENDPOINTS = {
   EVENT_CHECKIN: '/events/checkin',
   EVENT_CANCEL: (id) => `/events/${id}/cancel`,
 
+  // Registrations
+  REG_REGISTER: (eventId) => `/registrations/${eventId}/register`,
+  REG_MY_QR: (eventId) => `/registrations/${eventId}/my-qr`,
+  REG_STATUS: (eventId) => `/registrations/${eventId}/status`,
+  REG_VALIDATE_QR: '/registrations/validate-qr',
+  REG_LIST: (eventId) => `/registrations/${eventId}/list`,
+  REG_EXPORT: (eventId) => `/registrations/${eventId}/export`,
+  REG_UNREGISTER: (eventId) => `/registrations/${eventId}/unregister`,
+
   // Polls
   POLLS: '/polls',
   POLL_BY_ID: (id) => `/polls/${id}`,

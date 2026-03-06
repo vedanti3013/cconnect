@@ -11,24 +11,21 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Camera } from 'expo-camera';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { eventAPI } from '../services/api';
+import { registrationAPI } from '../services/api';
 import { COLORS } from '../config/constants';
 
 const QRScannerScreen = ({ route, navigation }) => {
   const eventId = route.params?.eventId;
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
+  const [lastResult, setLastResult] = useState(null);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
+    requestPermission();
   }, []);
 
   const handleBarCodeScanned = async ({ type, data }) => {
@@ -36,29 +33,67 @@ const QRScannerScreen = ({ route, navigation }) => {
     
     setScanned(true);
     setProcessing(true);
+    setLastResult(null);
 
     try {
-      // The QR code data should be the event's qr_code field
-      const response = await eventAPI.checkIn(data);
+      // Parse the QR code data (contains token, eventId, pid)
+      let qrPayload;
+      try {
+        qrPayload = JSON.parse(data);
+      } catch {
+        throw new Error('Invalid QR code format');
+      }
+
+      if (!qrPayload.token) {
+        throw new Error('Invalid QR code — no token found');
+      }
+
+      // Call the validate-qr endpoint (committee/admin only)
+      const response = await registrationAPI.validateQR({
+        token: qrPayload.token,
+        eventId: eventId || qrPayload.eventId,
+        pid: qrPayload.pid
+      });
       
+      const regData = response.data.data.registration;
+      setLastResult({
+        success: true,
+        name: regData.name,
+        pid: regData.pid,
+        department: regData.department,
+        section: regData.section,
+        year: regData.year,
+        message: response.data.message
+      });
+
       Alert.alert(
-        'Check-in Successful!',
-        `You've successfully checked in to ${response.data.data.event?.title || 'the event'}`,
+        'Attendance Marked!',
+        `${regData.name} (${regData.pid})\nDept: ${regData.department}${regData.section ? ` | Sec: ${regData.section}` : ''}${regData.year ? ` | Year: ${regData.year}` : ''}`,
         [
           {
-            text: 'OK',
+            text: 'Scan Next',
+            onPress: () => {
+              setScanned(false);
+              setLastResult(null);
+            },
+          },
+          {
+            text: 'Done',
             onPress: () => navigation.goBack(),
           },
         ]
       );
     } catch (error) {
-      console.error('Check-in error:', error);
+      console.error('Scan error:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to validate QR code';
+      setLastResult({ success: false, message: errorMsg });
+
       Alert.alert(
-        'Check-in Failed',
-        error.response?.data?.message || 'Failed to check in. Please try again.',
+        'Scan Failed',
+        errorMsg,
         [
           {
-            text: 'Try Again',
+            text: 'Scan Again',
             onPress: () => setScanned(false),
           },
           {
@@ -73,7 +108,7 @@ const QRScannerScreen = ({ route, navigation }) => {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -82,7 +117,7 @@ const QRScannerScreen = ({ route, navigation }) => {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
         <Ionicons name="camera-outline" size={64} color={COLORS.gray} />
@@ -96,14 +131,14 @@ const QRScannerScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Camera
+      <CameraView
         style={styles.camera}
-        type={Camera.Constants.Type.back}
-        flashMode={flashOn ? Camera.Constants.FlashMode.torch : Camera.Constants.FlashMode.off}
-        barCodeScannerSettings={{
-          barCodeTypes: [BarCodeScanner.Constants.BarCodeType.qr],
+        facing="back"
+        enableTorch={flashOn}
+        barcodeScannerSettings={{
+          barcodeTypes: ['qr'],
         }}
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       >
         <View style={styles.overlay}>
           {/* Top */}
@@ -156,10 +191,29 @@ const QRScannerScreen = ({ route, navigation }) => {
         {processing && (
           <View style={styles.processingOverlay}>
             <ActivityIndicator size="large" color={COLORS.white} />
-            <Text style={styles.processingText}>Checking in...</Text>
+            <Text style={styles.processingText}>Validating attendance...</Text>
           </View>
         )}
-      </Camera>
+
+        {/* Last result banner */}
+        {lastResult && !processing && (
+          <View style={[
+            styles.resultBanner,
+            { backgroundColor: lastResult.success ? COLORS.success : COLORS.danger }
+          ]}>
+            <Ionicons
+              name={lastResult.success ? 'checkmark-circle' : 'close-circle'}
+              size={20}
+              color={COLORS.white}
+            />
+            <Text style={styles.resultText}>
+              {lastResult.success
+                ? `${lastResult.name} (${lastResult.pid})`
+                : lastResult.message}
+            </Text>
+          </View>
+        )}
+      </CameraView>
     </View>
   );
 };
@@ -285,6 +339,23 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  resultBanner: {
+    position: 'absolute',
+    top: 40,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+  },
+  resultText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 10,
+    flex: 1,
   },
 });
 

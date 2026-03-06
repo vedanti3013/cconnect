@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
-import { eventAPI } from '../services/api';
+import { eventAPI, postAPI } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { COLORS } from '../config/constants';
 
@@ -30,24 +30,54 @@ const CalendarScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    // Filter events for selected date
+    // Filter events for selected date using local time (not UTC)
     const filtered = events.filter(event => {
-      const eventDate = new Date(event.date).toISOString().split('T')[0];
+      const d = new Date(event.date);
+      const eventDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       return eventDate === selectedDate;
     });
     setEventsForDate(filtered);
   }, [selectedDate, events]);
 
+  const toLocalDateString = (date) => {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const fetchEvents = async () => {
     try {
-      const response = await eventAPI.getAll({ limit: 100 });
-      const eventsList = response.data.data.events || [];
-      setEvents(eventsList);
+      // Fetch both regular events AND posts with event_date
+      const [eventsRes, postsRes] = await Promise.all([
+        eventAPI.getAll({ limit: 100 }),
+        postAPI.getAll({ limit: 200 }),
+      ]);
 
-      // Create marked dates object
+      const regularEvents = eventsRes.data.data.events || [];
+      const allPosts = postsRes.data.data.posts || [];
+
+      // Convert posts with event_date to event format
+      const eventPosts = allPosts
+        .filter(post => post.event_date)
+        .map(post => ({
+          _id: post._id,
+          title: post.title,
+          description: post.description,
+          date: post.event_date,
+          location: post.department,
+          department: post.department,
+          created_by: post.created_by,
+          isFromPost: true,
+        }));
+
+      // Combine both sources
+      const combinedEvents = [...regularEvents, ...eventPosts];
+      combinedEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+      setEvents(combinedEvents);
+
+      // Create marked dates object using local time
       const marked = {};
-      eventsList.forEach(event => {
-        const dateStr = new Date(event.date).toISOString().split('T')[0];
+      combinedEvents.forEach(event => {
+        const dateStr = toLocalDateString(event.date);
         if (!marked[dateStr]) {
           marked[dateStr] = {
             marked: true,

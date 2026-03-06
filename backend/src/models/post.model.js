@@ -50,6 +50,11 @@ const postSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  linked_event_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    default: null
+  },
   likes: {
     type: Number,
     default: 0,

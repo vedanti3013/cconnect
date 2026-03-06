@@ -13,9 +13,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { eventAPI, postAPI } from '../services/api';
+import { eventAPI, postAPI, registrationAPI } from '../services/api';
 import { COLORS, ROLES } from '../config/constants';
 
 const EventsScreen = ({ navigation }) => {
@@ -25,8 +26,10 @@ const EventsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('upcoming'); // upcoming, past, all
+  const [registeredEventIds, setRegisteredEventIds] = useState(new Set());
 
   const canCreateEvent = [ROLES.COMMITTEE, ROLES.ADMIN].includes(user?.role);
+  const isStudentOrTeacher = [ROLES.STUDENT, ROLES.TEACHER].includes(user?.role);
 
   const fetchEvents = async () => {
     try {
@@ -51,14 +54,16 @@ const EventsScreen = ({ navigation }) => {
       const formattedEventPosts = eventPosts
         .filter(post => post.event_date) // Only include posts with event_date
         .map(post => ({
-          _id: post._id,
+          _id: post.linked_event_id || post._id,
+          postId: post._id,
           title: post.title,
           description: post.description,
           date: post.event_date,
           location: post.department,
           department: post.department,
           created_by: post.created_by,
-          isFromPost: true, // Mark as coming from post
+          isFromPost: true,
+          hasLinkedEvent: !!post.linked_event_id,
         }));
 
       // Combine and filter based on selected filter
@@ -74,6 +79,16 @@ const EventsScreen = ({ navigation }) => {
       combinedEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
 
       setEvents(combinedEvents);
+
+      // Check registration status for all events with valid event IDs (students/teachers)
+      if (isStudentOrTeacher) {
+        const eventIdsToCheck = combinedEvents
+          .filter(e => !e.isFromPost || e.hasLinkedEvent)
+          .map(e => e._id);
+        if (eventIdsToCheck.length > 0) {
+          fetchRegistrationStatuses(eventIdsToCheck);
+        }
+      }
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -81,9 +96,38 @@ const EventsScreen = ({ navigation }) => {
     }
   };
 
+  const fetchRegistrationStatuses = async (eventIds) => {
+    try {
+      const statuses = await Promise.all(
+        eventIds.map(id =>
+          registrationAPI.getStatus(id)
+            .then(res => res.data.data.is_registered ? id : null)
+            .catch(() => null)
+        )
+      );
+      setRegisteredEventIds(new Set(statuses.filter(Boolean)));
+    } catch (error) {
+      console.error('Error fetching registration statuses:', error);
+    }
+  };
+
   useEffect(() => {
     fetchEvents();
   }, [filter]);
+
+  // Re-fetch registration statuses when screen comes back into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (events.length > 0 && isStudentOrTeacher) {
+        const eventIdsToCheck = events
+          .filter(e => !e.isFromPost || e.hasLinkedEvent)
+          .map(e => e._id);
+        if (eventIdsToCheck.length > 0) {
+          fetchRegistrationStatuses(eventIdsToCheck);
+        }
+      }
+    }, [events])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -118,16 +162,23 @@ const EventsScreen = ({ navigation }) => {
   const EventItem = ({ item }) => {
     const status = getEventStatus(item);
     const eventDate = new Date(item.date);
+    const isRegistered = registeredEventIds.has(item._id);
 
     const handlePress = () => {
-      if (item.isFromPost) {
+      if (item.isFromPost && !item.hasLinkedEvent) {
+        // Old-style post event without linked event — go to post detail
         navigation.navigate('Feed', {
           screen: 'PostDetail',
-          params: { postId: item._id }
+          params: { postId: item.postId || item._id }
         });
       } else {
+        // Regular event or post with linked event — go to event detail for registration/QR
         navigation.navigate('EventDetail', { eventId: item._id });
       }
+    };
+
+    const handleQRPress = () => {
+      navigation.navigate('EventQR', { eventId: item._id, eventTitle: item.title });
     };
 
     return (
@@ -180,7 +231,17 @@ const EventsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        <View style={styles.cardActions}>
+          {isStudentOrTeacher && isRegistered && (
+            <TouchableOpacity
+              style={[styles.qrIconButton, { backgroundColor: theme.primary }]}
+              onPress={handleQRPress}
+            >
+              <Ionicons name="qr-code-outline" size={18} color={COLORS.white} />
+            </TouchableOpacity>
+          )}
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -402,6 +463,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 8,
+  },
+  cardActions: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  qrIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',

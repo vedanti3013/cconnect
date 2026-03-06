@@ -16,7 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useAuth } from '../context/AuthContext';
-import { eventAPI } from '../services/api';
+import { eventAPI, registrationAPI } from '../services/api';
 import { COLORS, ROLES } from '../config/constants';
 
 const EventDetailScreen = ({ route, navigation }) => {
@@ -24,14 +24,22 @@ const EventDetailScreen = ({ route, navigation }) => {
   const { user } = useAuth();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registrationStatus, setRegistrationStatus] = useState(null);
   const [showQR, setShowQR] = useState(false);
 
   const canManageEvent = [ROLES.COMMITTEE, ROLES.ADMIN].includes(user?.role);
+  const isStudentOrTeacher = [ROLES.STUDENT, ROLES.TEACHER].includes(user?.role);
 
   useEffect(() => {
     fetchEventDetails();
   }, [eventId]);
+
+  useEffect(() => {
+    if (event && isStudentOrTeacher) {
+      fetchRegistrationStatus();
+    }
+  }, [event]);
 
   const fetchEventDetails = async () => {
     try {
@@ -46,27 +54,59 @@ const EventDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleRSVP = async () => {
-    setRsvpLoading(true);
+  const fetchRegistrationStatus = async () => {
     try {
-      const response = await eventAPI.rsvp(eventId);
-      setEvent(prev => ({
-        ...prev,
-        has_rsvp: response.data.data.has_rsvp,
-        attendees_count: response.data.data.attendees_count,
-      }));
+      const response = await registrationAPI.getStatus(eventId);
+      setRegistrationStatus(response.data.data);
+    } catch (error) {
+      console.error('Error fetching registration status:', error);
+      // Set default unregistered status so buttons still render
+      setRegistrationStatus({ is_registered: false, registration: null });
+    }
+  };
+
+  const handleRegisterForEvent = async () => {
+    setRegisterLoading(true);
+    try {
+      await registrationAPI.register(eventId);
+      await fetchRegistrationStatus();
       Alert.alert(
-        'Success',
-        response.data.data.has_rsvp
-          ? 'You have RSVPed to this event!'
-          : 'RSVP cancelled'
+        'Registered!',
+        'You have been registered for this event. You can now view your personalized QR code.',
+        [
+          { text: 'View My QR', onPress: () => navigation.navigate('EventQR', { eventId: event._id, eventTitle: event.title }) },
+          { text: 'OK', style: 'cancel' },
+        ]
       );
     } catch (error) {
-      console.error('Error RSVPing:', error);
-      Alert.alert('Error', 'Failed to update RSVP');
+      console.error('Error registering:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to register');
     } finally {
-      setRsvpLoading(false);
+      setRegisterLoading(false);
     }
+  };
+
+  const handleUnregister = async () => {
+    Alert.alert(
+      'Unregister',
+      'Are you sure you want to unregister from this event?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unregister',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await registrationAPI.unregister(eventId);
+              Alert.alert('Success', 'You have been unregistered from this event');
+              setRegistrationStatus({ is_registered: false, registration: null });
+            } catch (error) {
+              Alert.alert('Error', error.response?.data?.message || 'Failed to unregister');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleShare = async () => {
@@ -164,7 +204,7 @@ const EventDetailScreen = ({ route, navigation }) => {
           <Text style={styles.description}>{event.description}</Text>
         </View>
 
-        {/* QR Code Section */}
+        {/* QR Code Section — Committee/Admin can show event QR for display */}
         {canManageEvent && (
           <View style={styles.section}>
             <TouchableOpacity
@@ -173,7 +213,7 @@ const EventDetailScreen = ({ route, navigation }) => {
             >
               <Ionicons name="qr-code-outline" size={24} color={COLORS.primary} />
               <Text style={styles.qrToggleText}>
-                {showQR ? 'Hide' : 'Show'} Check-in QR Code
+                {showQR ? 'Hide' : 'Show'} Event QR Code
               </Text>
               <Ionicons
                 name={showQR ? 'chevron-up' : 'chevron-down'}
@@ -190,7 +230,7 @@ const EventDetailScreen = ({ route, navigation }) => {
                   backgroundColor={COLORS.white}
                 />
                 <Text style={styles.qrHint}>
-                  Display this QR code for attendees to scan
+                  Event QR code (for display purposes)
                 </Text>
               </View>
             )}
@@ -199,35 +239,34 @@ const EventDetailScreen = ({ route, navigation }) => {
 
         {/* Actions */}
         <View style={styles.actions}>
-          {!isPast && (
-            <TouchableOpacity
-              style={[
-                styles.rsvpButton,
-                event.has_rsvp && styles.rsvpButtonActive,
-              ]}
-              onPress={handleRSVP}
-              disabled={rsvpLoading}
-            >
-              {rsvpLoading ? (
-                <ActivityIndicator color={event.has_rsvp ? COLORS.primary : COLORS.white} />
+          {/* Student/Teacher: Register / View QR / Unregister */}
+          {!isPast && isStudentOrTeacher && (
+            <>
+              {registrationStatus?.is_registered ? (
+                <TouchableOpacity
+                  style={[styles.rsvpButton, styles.rsvpButtonActive]}
+                  onPress={handleUnregister}
+                >
+                  <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />
+                  <Text style={[styles.rsvpText, styles.rsvpTextActive]}>Registered</Text>
+                </TouchableOpacity>
               ) : (
-                <>
-                  <Ionicons
-                    name={event.has_rsvp ? 'checkmark-circle' : 'add-circle-outline'}
-                    size={24}
-                    color={event.has_rsvp ? COLORS.primary : COLORS.white}
-                  />
-                  <Text
-                    style={[
-                      styles.rsvpText,
-                      event.has_rsvp && styles.rsvpTextActive,
-                    ]}
-                  >
-                    {event.has_rsvp ? 'RSVPed' : 'RSVP'}
-                  </Text>
-                </>
+                <TouchableOpacity
+                  style={styles.rsvpButton}
+                  onPress={handleRegisterForEvent}
+                  disabled={registerLoading}
+                >
+                  {registerLoading ? (
+                    <ActivityIndicator color={COLORS.white} />
+                  ) : (
+                    <>
+                      <Ionicons name="add-circle-outline" size={24} color={COLORS.white} />
+                      <Text style={styles.rsvpText}>Register for Event</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </>
           )}
 
           <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
@@ -235,14 +274,25 @@ const EventDetailScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Check-in Button for Attendees */}
-        {!isPast && event.has_rsvp && (
+        {/* View My QR Button — only for registered students/teachers */}
+        {isStudentOrTeacher && registrationStatus?.is_registered && (
           <TouchableOpacity
-            style={styles.checkInButton}
+            style={[styles.checkInButton, styles.qrButton]}
+            onPress={() => navigation.navigate('EventQR', { eventId: event._id, eventTitle: event.title })}
+          >
+            <Ionicons name="qr-code-outline" size={24} color={COLORS.white} />
+            <Text style={styles.checkInText}>View My QR Code</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Committee/Admin: Scan QR to mark attendance */}
+        {!isPast && canManageEvent && (
+          <TouchableOpacity
+            style={[styles.checkInButton, { backgroundColor: COLORS.success }]}
             onPress={() => navigation.navigate('QRScanner', { eventId: event._id })}
           >
             <Ionicons name="scan-outline" size={24} color={COLORS.white} />
-            <Text style={styles.checkInText}>Scan QR to Check In</Text>
+            <Text style={styles.checkInText}>Scan QR to Mark Attendance</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -431,7 +481,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondary,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 40,
+    marginBottom: 16,
+  },
+  qrButton: {
+    backgroundColor: COLORS.primary,
+    marginBottom: 16,
   },
   checkInText: {
     marginLeft: 10,

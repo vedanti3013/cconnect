@@ -19,12 +19,51 @@ const eventRoutes = require('./routes/event.routes');
 const pollRoutes = require('./routes/poll.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const commentRoutes = require('./routes/comment.routes');
+const registrationRoutes = require('./routes/registration.routes');
 
 // Import middleware
 const errorHandler = require('./middleware/error.middleware');
 
 // Import schedulers
 const { initializeSchedulers } = require('./utils/scheduler');
+
+// Import models for migration
+const Post = require('./models/post.model');
+const Event = require('./models/event.model');
+
+// Backfill: create linked Event for existing posts with event_date
+const backfillPostEvents = async () => {
+  try {
+    const postsNeedingEvents = await Post.find({
+      event_date: { $ne: null },
+      linked_event_id: null,
+      is_deleted: false
+    });
+
+    if (postsNeedingEvents.length === 0) return;
+
+    console.log(`Backfilling ${postsNeedingEvents.length} post(s) with linked events...`);
+    for (const post of postsNeedingEvents) {
+      try {
+        const event = await Event.create({
+          title: post.title,
+          description: post.description || post.title,
+          date: post.event_date,
+          location: post.department || 'TBA',
+          department: post.department || 'All',
+          created_by: post.created_by
+        });
+        post.linked_event_id = event._id;
+        await post.save();
+      } catch (err) {
+        console.error(`Failed to backfill event for post ${post._id}:`, err.message);
+      }
+    }
+    console.log('Post-event backfill complete.');
+  } catch (err) {
+    console.error('Backfill error:', err.message);
+  }
+};
 
 const app = express();
 
@@ -52,6 +91,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/polls', pollRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/registrations', registrationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -76,17 +116,27 @@ app.use(errorHandler);
 // Database connection
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    const conn = await mongoose.connect(process.env.MONGODB_URI);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
     
     // Initialize schedulers after DB connection
     initializeSchedulers();
+    
+    // One-time migration: create linked events for posts with event_date
+    await backfillPostEvents();
   } catch (error) {
-    console.error('Database connection error:', error.message);
-    process.exit(1);
+    console.log('Starting in-memory MongoDB for development...');
+    try {
+      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      const uri = mongod.getUri();
+      const conn = await mongoose.connect(uri);
+      console.log(`In-Memory MongoDB Connected: ${conn.connection.host}`);
+      initializeSchedulers();
+    } catch (memError) {
+      console.error('Failed to start in-memory MongoDB:', memError.message);
+      process.exit(1);
+    }
   }
 };
 

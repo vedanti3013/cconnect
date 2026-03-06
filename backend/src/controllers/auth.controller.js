@@ -15,7 +15,7 @@ const { HTTP_STATUS } = require('../config/constants');
  * @access  Public
  */
 const register = asyncHandler(async (req, res) => {
-  const { name, pid, password, role, department, admission_year } = req.body;
+  const { name, pid, email, password, role, department, admission_year, section, year } = req.body;
 
   // Check if user already exists
   const existingUser = await User.findOne({ pid: pid.toUpperCase() });
@@ -27,10 +27,13 @@ const register = asyncHandler(async (req, res) => {
   const user = await User.create({
     name,
     pid: pid.toUpperCase(),
+    email,
     password,
     role,
     department,
-    admission_year
+    admission_year,
+    section: section || null,
+    year: year || null
   });
 
   // Update analytics
@@ -47,10 +50,13 @@ const register = asyncHandler(async (req, res) => {
         id: user._id,
         name: user.name,
         pid: user.pid,
+        email: user.email,
         role: user.role,
         department: user.department,
         admission_year: user.admission_year,
-        graduation_year: user.graduation_year
+        graduation_year: user.graduation_year,
+        section: user.section,
+        year: user.year
       },
       token
     }
@@ -105,10 +111,13 @@ const login = asyncHandler(async (req, res) => {
         id: user._id,
         name: user.name,
         pid: user.pid,
+        email: user.email,
         role: user.role,
         department: user.department,
         admission_year: user.admission_year,
         graduation_year: user.graduation_year,
+        section: user.section,
+        year: user.year,
         last_login: user.last_login
       },
       token

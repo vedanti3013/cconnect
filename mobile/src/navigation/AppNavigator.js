@@ -23,9 +23,11 @@ import CalendarScreen from '../screens/CalendarScreen';
 import PollsScreen from '../screens/PollsScreen';
 import CreatePollScreen from '../screens/CreatePollScreen';
 import QRScannerScreen from '../screens/QRScannerScreen';
+import EventQRScreen from '../screens/EventQRScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import UserDetailScreen from '../screens/UserDetailScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
+import RegistrationsScreen from '../screens/RegistrationsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -79,6 +81,7 @@ const EventsStack = () => (
     <Stack.Screen name="CreateEvent" component={CreateEventScreen} options={{ title: 'Create Event' }} />
     <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'Calendar' }} />
     <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: 'Scan QR Code' }} />
+    <Stack.Screen name="EventQR" component={EventQRScreen} options={{ title: 'My Event QR' }} />
   </Stack.Navigator>
 );
 
@@ -141,6 +144,9 @@ const AppNavigator = () => {
             case 'Events':
               iconName = focused ? 'calendar' : 'calendar-outline';
               break;
+            case 'Registrations':
+              iconName = focused ? 'list' : 'list-outline';
+              break;
             case 'Polls':
               iconName = focused ? 'bar-chart' : 'bar-chart-outline';
               break;
@@ -170,6 +176,13 @@ const AppNavigator = () => {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Feed" component={FeedStack} />
       <Tab.Screen name="Events" component={EventsStack} />
+      {[ROLES.COMMITTEE, ROLES.ADMIN, ROLES.TEACHER].includes(user?.role) && (
+        <Tab.Screen
+          name="Registrations"
+          component={RegistrationsScreen}
+          options={{ headerShown: true, headerStyle: { backgroundColor: COLORS.primary }, headerTintColor: COLORS.white, headerTitleStyle: { fontWeight: '600' } }}
+        />
+      )}
       <Tab.Screen name="Polls" component={PollsStack} />
       <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
